@@ -4,9 +4,15 @@ FROM node:20-slim AS base
 # Set working directory
 WORKDIR /app
 
-# Set environment variable to prevent interactive prompts and install OpenSSL
+# Set environment variables to prevent interactive prompts
 ENV DEBIAN_FRONTEND=noninteractive
-RUN apt-get update && apt-get install -y --no-install-recommends openssl && rm -rf /var/lib/apt/lists/*
+ENV DEBCONF_NONINTERACTIVE_SEEN=true
+
+# Install OpenSSL with automatic answers to configuration prompts
+RUN apt-get update && \
+    echo "openssl openssl/config_file_default select true" | debconf-set-selections && \
+    apt-get install -y --no-install-recommends -o Dpkg::Options::="--force-confdef" -o Dpkg::Options::="--force-confold" openssl && \
+    rm -rf /var/lib/apt/lists/*
 
 # Copy package files
 COPY package.json ./
@@ -33,9 +39,15 @@ WORKDIR /app
 RUN addgroup --system --gid 1001 nodejs
 RUN adduser --system --uid 1001 nextjs
 
-# Set environment variable to prevent interactive prompts and install OpenSSL
+# Set environment variables to prevent interactive prompts
 ENV DEBIAN_FRONTEND=noninteractive
-RUN apt-get update && apt-get install -y --no-install-recommends openssl && rm -rf /var/lib/apt/lists/*
+ENV DEBCONF_NONINTERACTIVE_SEEN=true
+
+# Install OpenSSL with automatic answers to configuration prompts
+RUN apt-get update && \
+    echo "openssl openssl/config_file_default select true" | debconf-set-selections && \
+    apt-get install -y --no-install-recommends -o Dpkg::Options::="--force-confdef" -o Dpkg::Options::="--force-confold" openssl && \
+    rm -rf /var/lib/apt/lists/*
 
 # Copy package files
 COPY package.json ./
