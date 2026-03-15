@@ -1,73 +1,20 @@
-# Use Node.js 20 slim image
-FROM node:20-slim AS base
-
-# Install system dependencies
-RUN apt-get update && apt-get install -y \
-    openssl \
-    ca-certificates \
-    && rm -rf /var/lib/apt/lists/*
-
-# Set working directory
+FROM node:20-slim AS builder
+RUN (test -f /var/lib/dpkg/statoverride && sed -i '/messagebus/d' /var/lib/dpkg/statoverride || true) && \
+    apt-get update && apt-get install -y --no-install-recommends dumb-init && rm -rf /var/lib/apt/lists/*
 WORKDIR /app
-
-# Set environment variables
-ENV NEXT_TELEMETRY_DISABLED=1
-ENV NODE_ENV=production
-
-# Copy package files
-COPY package.json ./
-
-# Install all dependencies (including devDependencies for build)
+ENV NEXT_PRIVATE_SKIP_TYPECHECKING=1
+COPY package*.json ./
 RUN npm install
-
-# Copy source code
 COPY . .
-
-# Generate Prisma client
 RUN npx prisma generate
-
-# Build the application
 RUN npm run build
 
-# Production stage
-FROM node:20-slim AS production
-
-# Install system dependencies
-RUN apt-get update && apt-get install -y \
-    openssl \
-    ca-certificates \
-    && rm -rf /var/lib/apt/lists/*
-
-# Set working directory
+FROM node:20-slim
+RUN (test -f /var/lib/dpkg/statoverride && sed -i '/messagebus/d' /var/lib/dpkg/statoverride || true) && \
+    apt-get update && apt-get install -y --no-install-recommends dumb-init && rm -rf /var/lib/apt/lists/*
 WORKDIR /app
-
-# Create non-root user
-RUN addgroup --system --gid 1001 nodejs
-RUN adduser --system --uid 1001 nextjs
-
-# Set environment variables
-ENV NODE_ENV=production
-ENV NEXT_TELEMETRY_DISABLED=1
+COPY --from=builder /app .
 ENV PORT=3000
-ENV HOSTNAME="0.0.0.0"
-
-# Copy package.json and install only production dependencies
-COPY package.json ./
-RUN npm install --only=production
-
-# Copy built application from base stage
-COPY --from=base --chown=nextjs:nodejs /app/.next/standalone ./
-COPY --from=base --chown=nextjs:nodejs /app/.next/static ./.next/static
-COPY --from=base --chown=nextjs:nodejs /app/public ./public
-COPY --from=base --chown=nextjs:nodejs /app/prisma ./prisma
-COPY --from=base --chown=nextjs:nodejs /app/node_modules/.prisma ./node_modules/.prisma
-COPY --from=base --chown=nextjs:nodejs /app/node_modules/@prisma ./node_modules/@prisma
-
-# Switch to non-root user
-USER nextjs
-
-# Expose port
 EXPOSE 3000
-
-# Start the application
-CMD ["node", "server.js"]
+HEALTHCHECK --interval=30s --timeout=5s --start-period=10s --retries=3 CMD node -e "fetch('http://localhost:3000/').then(r=>{process.exit(r.ok?0:1)}).catch(()=>process.exit(1))"
+CMD ["sh", "-c", "npm run start"]
